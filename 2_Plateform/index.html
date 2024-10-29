@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <title>TD2</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.js"></script>
+    <style type="text/css">
+      body {
+        margin: 0;
+      }
+    </style>
+
+    <script>
+      var config = {
+        type: Phaser.AUTO,
+        width: 1024,
+        height: 576,
+        physics: {
+          default: "arcade",
+          arcade: {
+            gravity: { y: 150 },
+            debug: false,
+          },
+        },
+        scene: {
+          preload: preload,
+          create: create,
+          update: update,
+        },
+      };
+
+      var game = new Phaser.Game(config);
+      var map, player, cursors, door, coins;
+      var groundLayer, coinLayer, picLayer;
+      var score = 0,
+        scoreText,
+        chrono = 60,
+        chronoText;
+      var life = 100,
+        lifeBar,
+        lifeBarWidth = 200;
+      var totalCoins = 1;
+
+      function preload() {
+        this.load.image("ground_1x1", "assets/ground_1x1.png");
+        this.load.image("pic", "assets/spike.png");
+        this.load.spritesheet("coin", "assets/coin.png", {
+          frameWidth: 32,
+          frameHeight: 32,
+        });
+        this.load.spritesheet("dude", "assets/dude.png", {
+          frameWidth: 32,
+          frameHeight: 48,
+        });
+        this.load.tilemapTiledJSON("map", "assets/tile-collision-test.json");
+      }
+
+      function create() {
+        map = this.make.tilemap({ key: "map" });
+        var groundTiles = map.addTilesetImage("ground_1x1");
+        var coinTiles = map.addTilesetImage("coin");
+        var picTiles = map.addTilesetImage("pic");
+
+        map.createLayer("Background Layer", groundTiles, 0, 0);
+        groundLayer = map.createLayer("Ground Layer", groundTiles, 0, 0);
+        coinLayer = map.createLayer("Coin Layer", coinTiles, 0, 0);
+        picLayer = map.createLayer("Pics Layer", picTiles, 0, 0);
+        groundLayer.setCollisionBetween(1, 25);
+        player = this.physics.add.sprite(150, 450, "dude");
+        player.setBounce(0.2);
+        this.physics.add.collider(player, groundLayer);
+
+        cursors = this.input.keyboard.createCursorKeys();
+        this.cameras.main.setBounds(
+          0,
+          0,
+          map.widthInPixels,
+          map.heightInPixels
+        );
+        this.cameras.main.startFollow(player);
+        this.anims.create({
+          key: "left",
+          frames: this.anims.generateFrameNumbers("dude", { start: 0, end: 3 }),
+          frameRate: 10,
+          repeat: -1,
+        });
+        this.anims.create({
+          key: "turn",
+          frames: this.anims.generateFrameNumbers("dude", { start: 4, end: 4 }),
+          frameRate: 10,
+        });
+        this.anims.create({
+          key: "right",
+          frames: this.anims.generateFrameNumbers("dude", { start: 5, end: 8 }),
+          frameRate: 10,
+          repeat: -1,
+        });
+        this.anims.create({
+          key: "spin",
+          frames: this.anims.generateFrameNumbers("coin", { start: 0, end: 5 }),
+          frameRate: 20,
+          repeat: -1,
+        });
+        coins = this.physics.add.group({
+          allowGravity: false,
+          immovable: true,
+        });
+        coinLayer.forEachTile(function (tile) {
+          if (tile.index === 26) {
+            var coin = coins.create(
+              tile.getCenterX(),
+              tile.getCenterY(),
+              "coin"
+            );
+            coin.anims.play("spin");
+            tile.setVisible(false);
+            coin.tile = tile;
+          }
+        });
+        scoreText = this.add.text(700, 5, "Pièces récupérées: 0", {
+          fontSize: "24px",
+          fill: "#fff",
+        });
+        scoreText.setScrollFactor(0);
+        chronoText = this.add.text(900, 45, "60 sec", {
+          fontSize: "24px",
+          fill: "#fff",
+        });
+        chronoText.setScrollFactor(0);
+        lifeBar = this.add.graphics();
+        lifeBar.fillStyle(0xff0000, 1);
+        lifeBar.fillRect(5, 5, lifeBarWidth, 20);
+        lifeBar.setScrollFactor(0);
+        this.physics.add.overlap(player, coins, hitCoin, null, this);
+        this.physics.add.overlap(player, picLayer);
+        coinLayer.setTileIndexCallback(26, hitCoin, this);
+        picLayer.setTileIndexCallback(32, hitPic, this);
+        timer.call(this);
+      }
+      function update() {
+        if (cursors.left.isDown) {
+          player.setVelocityX(-160);
+          player.anims.play("left", true);
+        } else if (cursors.right.isDown) {
+          player.setVelocityX(160);
+          player.anims.play("right", true);
+        } else {
+          player.setVelocityX(0);
+          player.anims.play("turn");
+        }
+        if (cursors.up.isDown && player.body.onFloor()) {
+          player.setVelocityY(-330);
+        }
+      }
+
+      function hitCoin(player, coin) {
+        coin.disableBody(true, true);
+        coinLayer.removeTileAt(coin.tile.x, coin.tile.y);
+        score += 1;
+        scoreText.setText("Pièces récupérées : " + score);
+
+        if (score === totalCoins) {
+          scoreText.setText("Trouvez la porte cachée !");
+          scoreText.x = 620;
+
+          door = this.physics.add.sprite(1008, 400, "door");
+          door.setTint(0x000000);
+          door.setAlpha(0);
+          this.physics.add.collider(door, groundLayer);
+          this.physics.add.overlap(player, door, hitDoor, null, this);
+        }
+      }
+      function hitPic(player, tile) {
+        life -= 1;
+        lifeBar.clear();
+        lifeBar.fillStyle(0xff0000, 1);
+        lifeBar.fillRect(5, 5, lifeBarWidth * (life / 100), 20);
+        if (life <= 0) {
+          this.physics.pause();
+          player.setTint(0xff0000);
+          scoreText.setText("Perdu !");
+        }
+      }
+      function hitDoor() {
+        door.setAlpha(1);
+        scoreText.setText("Gagné !!");
+        player.setTint(0x00ff00);
+        this.physics.pause();
+      }
+      function timer() {
+        var self = this;
+        var timerInterval = setInterval(function () {
+          chrono -= 1;
+          chronoText.setText(chrono + " sec");
+
+          if (chrono == 0) {
+            self.physics.pause();
+            player.setTint(0xff0000);
+            scoreText.setText("Perdu !");
+            clearInterval(timerInterval);
+          }
+        }, 1000);
+      }
+    </script>
+  </head>
+  <body></body>
+</html>
