@@ -1,2 +1,2 @@
 # Phazer
-Multiple JavaScript games using Phazer.
+Multiple JavaScript games using Phaser.
